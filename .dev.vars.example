@@ -1,0 +1,6 @@
+# Local dev only — never commit real values. Production: `wrangler secret put`.
+ENCRYPTION_KEY = "dev-only-32-char-minimum-secret-please-change"
+ADMIN_SECRET = "dev-only-admin-secret-please-change"
+GARMIN_DOMAIN = "garmin.com"
+GARMIN_ENABLED_TOOLS = ""
+GARMIN_DISABLED_TOOLS = ""

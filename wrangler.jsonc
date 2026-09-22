@@ -1,0 +1,33 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "garmin-cf-mcp",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-09-01",
+  // nodejs_compat: MCP SDK. global_fetch_strictly_public: required by
+  // workers-oauth-provider for Client ID Metadata Document (CIMD) fetches.
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "workers_dev": true,
+  "routes": [{ "pattern": "garmin.shyim.de", "custom_domain": true }],
+
+  // Stateless MCP (SDK v2 + createMcpHandler): no Durable Objects needed.
+  //   GARMIN_KV — app data: garmin:<userId> (encrypted tokens), user:<userId>,
+  //               session:<sid>, pending:<nonce>, dl:<nonce>,
+  //               tenant-key:* / tenant-user:* (legacy static keys).
+  //   OAUTH_KV  — OAuth 2.1 server state (clients, grants, tokens), owned by
+  //               @cloudflare/workers-oauth-provider. May point at the same
+  //               namespace id as GARMIN_KV (prefixes don't collide).
+  "kv_namespaces": [
+    { "binding": "GARMIN_KV", "id": "ce9acfdc9a4b4065beaf42bf79d53463", "preview_id": "ce9acfdc9a4b4065beaf42bf79d53463" },
+    { "binding": "OAUTH_KV", "id": "c089054ff25f47f9ad0a5ed31b58bd07", "preview_id": "c089054ff25f47f9ad0a5ed31b58bd07" }
+  ],
+
+  "vars": {
+    "GARMIN_DOMAIN": "garmin.com",
+    "GARMIN_ENABLED_TOOLS": "",
+    "GARMIN_DISABLED_TOOLS": ""
+  }
+
+  // Secrets (wrangler secret put):
+  //   ENCRYPTION_KEY  (required, ≥32 random chars) — encrypts Garmin tokens + pending sign-ins
+  //   ADMIN_SECRET    (optional) — Bearer for /admin/* (user listing, legacy tenant keys)
+}

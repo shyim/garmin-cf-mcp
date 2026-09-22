@@ -1,0 +1,27 @@
+{
+  "name": "garmin-cf-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "description": "Garmin Connect MCP server on Cloudflare Workers — multi-tenant with OAuth 2.1 auth (MCP spec) + per-user encrypted Garmin tokens. Port of taxuspt/garmin_mcp.",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "cf-typegen": "wrangler types",
+    "typecheck": "tsc --noEmit",
+    "import-tokens": "node scripts/import-tokens.mjs"
+  },
+  "dependencies": {
+    "@cloudflare/workers-oauth-provider": "^0.10.3",
+    "@modelcontextprotocol/server": "^2.0.0",
+    "agents": "^0.23.0",
+    "hono": "^4.13.8",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5",
+    "typescript": "^5.9.3",
+    "wrangler": "^4.135.0"
+  }
+}
