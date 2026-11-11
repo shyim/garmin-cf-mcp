@@ -11,6 +11,7 @@
 // API → service ticket → DI token); this file only talks to connectapi.
 
 import type { GarminTokens } from "../store/tokens.js";
+import { activityImageIds, decodeActivityImage } from "./activity-image.js";
 
 export const NATIVE_HEADERS: Record<string, string> = {
   "User-Agent": "GCM-Android-5.23",
@@ -226,6 +227,7 @@ export class GarminClient {
       params?: Record<string, string | number | boolean | undefined>;
       json?: unknown;
       form?: URLSearchParams | string;
+      multipart?: FormData;
       headers?: Record<string, string>;
       raw?: boolean;
     } = {},
@@ -257,6 +259,9 @@ export class GarminClient {
     } else if (opts.form !== undefined) {
       headers["Content-Type"] = "application/x-www-form-urlencoded";
       body = opts.form.toString();
+    } else if (opts.multipart !== undefined) {
+      // fetch must generate the multipart boundary, including on an auth retry.
+      body = opts.multipart;
     }
 
     const doFetch = () =>
@@ -333,6 +338,39 @@ export class GarminClient {
   }
   getActivity(id: string | number) {
     return this.get(`${EP.activityBase}/${id}`);
+  }
+  async uploadActivityImage(id: string | number, imageBase64: string, filename: string) {
+    if ((typeof id === "number" && !Number.isSafeInteger(id)) || !/^[1-9]\d*$/.test(String(id)))
+      throw new Error("activity_id must be a positive integer (use a string for large IDs)");
+    const image = decodeActivityImage(imageBase64, filename);
+    const before = new Set(activityImageIds(await this.getActivity(id)));
+    const form = new FormData();
+    form.append("file", image, filename);
+    let upload: unknown;
+    try {
+      upload = await this.request("POST", `${EP.activityBase}/${id}/image`, { multipart: form });
+    } catch (e) {
+      throw new Error(`Photo upload failed or its outcome is unknown: ${(e as Error).message}. Inspect get_activity before retrying to avoid duplicate photos.`);
+    }
+    // A successful POST is not proof that the image is visible yet. Never repeat
+    // the POST on a verification failure; Garmin may have accepted it already.
+    const returnedId = (upload as { imageId?: unknown } | null)?.imageId;
+    const expectedId = typeof returnedId === "string" || typeof returnedId === "number" ? String(returnedId) : null;
+    try {
+      for (let attempt = 0; attempt < 3; attempt++) {
+        if (attempt) await new Promise((resolve) => setTimeout(resolve, 1000));
+        const ids = activityImageIds(await this.getActivity(id));
+        const added = ids.filter((imageId) => !before.has(imageId));
+        const verified = expectedId ? added.includes(expectedId) : added.length === 1;
+        if (verified) return { activity_id: String(id), uploaded: true, verified: true, image_ids: added };
+      }
+    } catch {
+      // Report the completed write even if the following GET fails.
+    }
+    return {
+      activity_id: String(id), uploaded: true, verified: false,
+      warning: "Garmin accepted the upload, but a new image could not be confirmed. Inspect get_activity metadataDTO.activityImages before retrying to avoid duplicates.",
+    };
   }
   updateActivity(id: string | number, payload: unknown) {
     return this.request("PUT", `${EP.activityBase}/${id}`, { json: payload });
