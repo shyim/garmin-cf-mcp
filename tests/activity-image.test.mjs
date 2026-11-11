@@ -167,7 +167,7 @@ test("registers a non-idempotent write, honors tool filters, and returns MCP err
   const { config, handler } = registrations.get("upload_activity_image");
   assert.equal(config.annotations.readOnlyHint, false);
   assert.equal(config.annotations.idempotentHint, false);
-  assert.equal(config.inputSchema.activity_id.safeParse("../1").success, false);
+  assert.equal(config.inputSchema.shape.activity_id.safeParse("../1").success, false);
   assert.equal((await handler({ activity_id: 123, image_base64: png, filename: "photo.png" })).isError, true);
   registrations.clear();
   registerActivityTools({ env: { GARMIN_DISABLED_TOOLS: "upload_activity_image" }, client, server });

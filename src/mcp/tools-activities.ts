@@ -60,11 +60,11 @@ export function registerActivityTools({ env, client, server, origin, userId }: C
   if (allow("upload_activity_image"))
     server.registerTool("upload_activity_image", {
       description: "Attach one JPEG/PNG photo (max 5 MiB) to an existing activity and verify a new image appears. Pass padded standard Base64, without a data URL prefix. Check uploaded and verified separately; inspect get_activity before retrying an uncertain outcome to avoid duplicates.",
-      inputSchema: {
+      inputSchema: z.object({
         activity_id: z.union([z.number().int().positive().max(Number.MAX_SAFE_INTEGER), z.string().regex(/^[1-9]\d*$/)]),
         image_base64: z.string().min(1).max(MAX_IMAGE_BASE64_LENGTH),
         filename: z.string().min(1).max(128),
-      },
+      }),
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     }, async ({ activity_id, image_base64, filename }) => {
       try {
