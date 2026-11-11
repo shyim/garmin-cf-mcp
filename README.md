@@ -3,7 +3,7 @@
 Multi-tenant MCP server for Garmin Connect. A Cloudflare Workers port of
 [taxuspt/garmin_mcp](https://github.com/taxuspt/garmin_mcp): the original 156
 tools, plus `garmin_status`, `garmin_connect`, `garmin_disconnect`, and
-`garmin_api`.
+`garmin_api` and `upload_activity_image`.
 
 The public server is **https://garmin.shyim.de/mcp**. Add that URL to an MCP
 client, sign in with your Garmin account, and the client can read and update
@@ -70,6 +70,65 @@ The client lists every tool. They follow the original server, grouped roughly as
 cannot write a FIT file to your disk. `set_fit_download_dir` is the one
 original tool that has no equivalent.
 
+### Activity photo upload
+
+`upload_activity_image(activity_id, image_base64, filename)` attaches **one**
+JPEG or PNG photo to an existing activity using the signed-in user's Garmin
+tokens. It does not import activity files or change activity fields.
+
+| Argument | Format |
+|---|---|
+| `activity_id` | Positive integer, or decimal string (preferred for large IDs) |
+| `image_base64` | Padded standard Base64, without whitespace or a `data:` prefix; at most **5 MiB decoded** |
+| `filename` | Basename ending in `.jpg`, `.jpeg` or `.png`, at most 128 characters |
+
+The filename and image signature must agree. The tool validates input before
+network access, reads the activity's current image IDs, then sends
+`POST /activity-service/activity/{id}/image` with multipart field `file`.
+`fetch` supplies the Content-Type boundary; the existing token refresh and
+per-user token persistence are reused. No external image host, URL fetching,
+extra secrets, or persistent image storage is required.
+
+The result separates acceptance from verification:
+
+```json
+{
+  "activity_id": "123456789",
+  "uploaded": true,
+  "verified": true,
+  "image_ids": ["new-image-id"]
+}
+```
+
+Verification reads `metadataDTO.activityImages` from `get_activity`, up to
+three times with one-second gaps. If the upload returns `imageId`, that new
+ID must appear; otherwise exactly one new ID must appear relative to the
+pre-upload snapshot. Concurrent uploads can make this fallback ambiguous.
+Existing photos alone never count as verification.
+
+If Garmin accepts the POST but visibility cannot be confirmed, the tool returns
+`uploaded: true`, `verified: false`, and a warning. A failed/uncertain POST is
+an MCP error. **Inspect `get_activity` before retrying either uncertain case**:
+the photo may already exist. Only verification GETs are polled; the POST is
+not repeated except after the existing client's 401 token-refresh flow.
+Garmin may impose additional account/photo limits.
+
+The tool honors `GARMIN_ENABLED_TOOLS` and `GARMIN_DISABLED_TOOLS`. Its MCP
+annotations identify it as a non-idempotent write. The generic `garmin_api`
+tool remains GET-only.
+
+The request shape and detail-response field were checked against Garmin
+Connect web app **5.31.2.2** (2026-11-11), specifically its public
+[activity API module](https://connect.garmin.com/web-react/static/js/async/pma.49900eb6.chunk__5.31.2.2.js)
+and [activity photo UI](https://connect.garmin.com/web-react/static/js/async/yl.96e48aef.chunk__5.31.2.2.js).
+These are undocumented Garmin endpoints. Automated tests mock Garmin;
+a real account upload still needs a deployed server and a live smoke test.
+
+For that smoke test, choose an activity you own, note its current image IDs,
+call the tool with a small JPEG/PNG encoded as above, then confirm the new
+ID in `get_activity.metadataDTO.activityImages` and the photo in Connect.
+An accepted but unverified result should be inspected rather than re-uploaded.
+
 ## Self-host
 
 You need Node, a Cloudflare account, and a Wrangler login.
@@ -100,6 +159,11 @@ plain vars in `wrangler.jsonc`, comma-separated tool names, same as the
 original server. `GARMIN_DOMAIN` is `garmin.com` or `garmin.cn`.
 
 ### Local dev
+
+Run `npm run typecheck` and `npm test` (Node 20+). Tests compile into the ignored
+`.test-build/` directory and use Node's built-in test runner, with no Garmin
+credentials or live writes. They cover multipart bytes and boundaries, token
+refresh/retry, tenant domains, validation, verification, errors and tool filters.
 
 ```
 cp .dev.vars.example .dev.vars

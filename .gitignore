@@ -2,4 +2,5 @@ node_modules/
 .dev.vars
 .wrangler/
 dist/
+.test-build/
 .pi/

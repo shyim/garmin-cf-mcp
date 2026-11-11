@@ -6,6 +6,7 @@ import { GarminClient } from "../garmin/client.js";
 import { toolAllowed } from "./filter.js";
 import { mintDownload } from "../store/downloads.js";
 import type { Env } from "../env.js";
+import { MAX_IMAGE_BASE64_LENGTH } from "../garmin/activity-image.js";
 
 interface Ctx {
   env: Env;
@@ -55,6 +56,23 @@ export function registerActivityTools({ env, client, server, origin, userId }: C
   if (allow("count_activities"))
     tool(server, "count_activities", "Total number of activities in the account.",
       {}, async () => wrap(async () => ({ total_activities: await client.getActivitiesCount() })));
+
+  if (allow("upload_activity_image"))
+    server.registerTool("upload_activity_image", {
+      description: "Attach one JPEG/PNG photo (max 5 MiB) to an existing activity and verify a new image appears. Pass padded standard Base64, without a data URL prefix. Check uploaded and verified separately; inspect get_activity before retrying an uncertain outcome to avoid duplicates.",
+      inputSchema: z.object({
+        activity_id: z.union([z.number().int().positive().max(Number.MAX_SAFE_INTEGER), z.string().regex(/^[1-9]\d*$/)]),
+        image_base64: z.string().min(1).max(MAX_IMAGE_BASE64_LENGTH),
+        filename: z.string().min(1).max(128),
+      }),
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    }, async ({ activity_id, image_base64, filename }) => {
+      try {
+        return t(await client.uploadActivityImage(activity_id, image_base64, filename));
+      } catch (e) {
+        return { ...t(`Garmin error: ${(e as Error).message}`), isError: true };
+      }
+    });
 
   if (allow("get_activity_types"))
     tool(server, "get_activity_types", "List all valid activity type keys (for set_activity_type).",
